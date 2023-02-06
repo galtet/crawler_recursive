@@ -3,8 +3,6 @@ const cheerio = require("cheerio");
 const url = require('url');
 const fs = require('fs');
 
-const max_depth = 2;
-
 function getBaseUrl(fullUrl) {
   const parsedUrl = url.parse(fullUrl);
   let baseUrl = `${parsedUrl.protocol}//${parsedUrl.hostname}`;
@@ -16,7 +14,7 @@ function getBaseUrl(fullUrl) {
 }
 
 function transformsRelativePath(relativePath, baseUrl) {
-  if (!relativePath.startsWith("http") || !relativePath.startsWith("https")) {
+  if (relativePath && (!relativePath.startsWith("http") || !relativePath.startsWith("https"))) {
     var tranformed = new URL(relativePath, baseUrl).href
     if (tranformed == relativePath) {
       return null
@@ -36,8 +34,8 @@ function extractLinks($, baseUrl) {
       links.push(transformed);
     }
   });
-
-  return Array.from(new Set(links)).slice(0,20);
+  
+  return Array.from(new Set(links));
 }
 
 function extractImages($, sourceUrl, depth) {
@@ -47,7 +45,7 @@ function extractImages($, sourceUrl, depth) {
     images.push({
         imageUrl: src,
         sourceUrl: sourceUrl,
-        depth: depth
+        depth: depth 
       }
     );
   });
@@ -57,7 +55,7 @@ function extractImages($, sourceUrl, depth) {
 
 async function getHTML(url) {
   return new Promise((resolve, reject) => {
-    request(url, (error, response, html) => {
+    request({url: url, timeout: 1000}, (error, response, html) => {
       if (!error && response.statusCode == 200) {
         resolve(html);
       } else {
@@ -67,13 +65,12 @@ async function getHTML(url) {
   });
 }
 
-async function workOnLink(fullUrl, imagesAggregator, depth, visited){
+async function workOnLink(fullUrl, imagesAggregator, depth, visited, maxDepth){
   try {
-
-    if (depth > 2 || !fullUrl || visited.includes(fullUrl)) {
+    
+    if (depth > maxDepth || !fullUrl || visited.includes(fullUrl)) {
       return ;
     }
-    console.log("DEPTH IS " + depth + ", url is " + fullUrl);
 
     visited.push(fullUrl);
 
@@ -89,7 +86,7 @@ async function workOnLink(fullUrl, imagesAggregator, depth, visited){
 
     const tasks = []
     for (const link of links) {
-      tasks.push(workOnLink(link, imagesAggregator, depth +1, visited));
+      tasks.push(workOnLink(link, imagesAggregator, depth +1, visited, maxDepth));
     }
 
     await Promise.all(tasks);
@@ -100,18 +97,24 @@ async function workOnLink(fullUrl, imagesAggregator, depth, visited){
 }
 
 async function main() {
+  // User Params
+  const fullUrl = process.argv[2]
+  const maxDepth = parseInt(process.argv[3])
+
   const images = []
-  await workOnLink("https://rotter.net", images, 0, []);
+  await workOnLink(fullUrl, images, 0, [], maxDepth);
+  
   console.log(JSON.stringify(images, null, 4));
 
-  fs.writeFile("output.json", JSON.stringify(images, null, 4), 'utf8', function (err) {
+  fs.writeFile("images.json", JSON.stringify(images, null, 4), 'utf8', function (err) {
     if (err) {
         console.log("An error occured while writing JSON Object to File.");
         return console.log(err);
     }
-
+ 
     console.log("JSON file has been saved.");
 });
 }
 
 main();
+
